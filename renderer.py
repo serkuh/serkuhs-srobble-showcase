@@ -11,7 +11,7 @@ from typing import Any
 import requests
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
-WIDGET_BUILD = "album-year-and-trackinfo-v1"
+WIDGET_BUILD = "album-year-mbid-v2"
 
 ROOT = Path(__file__).resolve().parent
 ASSETS = ROOT / "assets"
@@ -220,22 +220,35 @@ def _extract_release_year(releasedate: str | None) -> str | None:
     return match.group(0) if match else None
 
 
-def fetch_album_year(artist: str, album: str, api_key: str) -> str | None:
-    artist = str(artist or "").strip()
-    album = str(album or "").strip()
-    if not artist or not album:
+def fetch_album_year(
+    api_key: str,
+    *,
+    mbid: str | None = None,
+    artist: str | None = None,
+    album: str | None = None,
+) -> str | None:
+    params: dict[str, Any] = {
+        "method": "album.getInfo",
+        "api_key": api_key,
+        "format": "json",
+        "autocorrect": 1,
+    }
+
+    clean_mbid = str(mbid or "").strip()
+    clean_artist = str(artist or "").strip()
+    clean_album = str(album or "").strip()
+
+    if clean_mbid:
+        params["mbid"] = clean_mbid
+    elif clean_artist and clean_album:
+        params["artist"] = clean_artist
+        params["album"] = clean_album
+    else:
         return None
 
     response = requests.get(
         "https://ws.audioscrobbler.com/2.0/",
-        params={
-            "method": "album.getInfo",
-            "artist": artist,
-            "album": album,
-            "api_key": api_key,
-            "format": "json",
-            "autocorrect": 1,
-        },
+        params=params,
         timeout=15,
         headers={"User-Agent": "manakin-now-playing-widget/1.0"},
     )
@@ -248,12 +261,17 @@ def fetch_album_year(artist: str, album: str, api_key: str) -> str | None:
     return _extract_release_year(album_info.get("releasedate"))
 
 
-def fetch_track_user_playcount(artist: str, track: str, user: str, api_key: str) -> int | None:
+def fetch_track_info(artist: str, track: str, user: str, api_key: str) -> dict[str, Any]:
     artist = str(artist or "").strip()
     track = str(track or "").strip()
     user = str(user or "").strip()
     if not artist or not track or not user:
-        return None
+        return {
+            "user_playcount": None,
+            "album_mbid": "",
+            "album_title": "",
+            "album_artist": "",
+        }
 
     response = requests.get(
         "https://ws.audioscrobbler.com/2.0/",
@@ -277,9 +295,17 @@ def fetch_track_user_playcount(artist: str, track: str, user: str, api_key: str)
     track_info = payload.get("track", {}) or {}
     raw_count = track_info.get("userplaycount")
     try:
-        return int(raw_count)
+        user_playcount = int(raw_count)
     except (TypeError, ValueError):
-        return None
+        user_playcount = None
+
+    album_info = track_info.get("album", {}) or {}
+    return {
+        "user_playcount": user_playcount,
+        "album_mbid": str(album_info.get("mbid") or "").strip(),
+        "album_title": str(album_info.get("title") or "").strip(),
+        "album_artist": str(album_info.get("artist") or "").strip(),
+    }
 
 
 def fetch_lastfm_track(user: str, api_key: str) -> dict[str, Any]:
@@ -338,17 +364,34 @@ def fetch_lastfm_track(user: str, api_key: str) -> dict[str, Any]:
         if timestamp_text:
             timestamp = int(timestamp_text)
 
+    track_details = {
+        "user_playcount": None,
+        "album_mbid": "",
+        "album_title": "",
+        "album_artist": "",
+    }
+    try:
+        track_details = fetch_track_info(artist_name, track_name, user, api_key)
+    except Exception:
+        pass
+
+    # Prefer Last.fm's canonical album identifier from track.getInfo. This is
+    # more reliable than matching only the raw album text supplied by a player.
+    canonical_album = track_details.get("album_title") or album_name
+    canonical_album_artist = track_details.get("album_artist") or artist_name
+
     album_year = None
     try:
-        album_year = fetch_album_year(artist_name, album_name, api_key)
+        album_year = fetch_album_year(
+            api_key,
+            mbid=track_details.get("album_mbid"),
+            artist=canonical_album_artist,
+            album=canonical_album,
+        )
     except Exception:
         album_year = None
 
-    user_playcount = None
-    try:
-        user_playcount = fetch_track_user_playcount(artist_name, track_name, user, api_key)
-    except Exception:
-        user_playcount = None
+    user_playcount = track_details.get("user_playcount")
 
     return {
         "track": track_name,
