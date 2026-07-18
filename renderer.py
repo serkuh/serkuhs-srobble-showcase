@@ -10,7 +10,7 @@ from typing import Any
 import requests
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
-WIDGET_BUILD = "idle-mascot-integrated-v7"
+WIDGET_BUILD = "larger-detail-text-v9"
 
 ROOT = Path(__file__).resolve().parent
 ASSETS = ROOT / "assets"
@@ -170,6 +170,41 @@ def _draw_pixel_text(canvas: Image.Image, xy: tuple[int, int], text: str, scale:
             _draw_bitmap(draw, (cursor, accent_y), accent, scale, fill)
 
         cursor += (5 + spacing) * scale
+
+
+
+def _draw_pixel_text_width_fitted(
+    canvas: Image.Image,
+    xy: tuple[int, int],
+    text: str,
+    scale: int,
+    max_width: int,
+    fill: tuple[int, int, int, int],
+    spacing: int = 1,
+) -> None:
+    """Preserve text height; compress only width when a line is too long."""
+    clean = " ".join(unicodedata.normalize("NFC", str(text or "")).upper().split())
+    natural_width = max(1, _pixel_measure(clean, scale, spacing))
+    text_height = 7 * scale
+
+    # Extra space above protects accented capitals whose marks sit above the 5x7 body.
+    accent_margin = 3 * scale
+    layer = Image.new(
+        "RGBA",
+        (natural_width, text_height + accent_margin),
+        (0, 0, 0, 0),
+    )
+    _draw_pixel_text(layer, (0, accent_margin), clean, scale, fill, spacing)
+
+    fitted_width = min(natural_width, max_width)
+    if fitted_width != natural_width:
+        layer = layer.resize(
+            (fitted_width, layer.height),
+            Image.Resampling.LANCZOS,
+        )
+
+    canvas.alpha_composite(layer, dest=(xy[0], xy[1] - accent_margin))
+
 
 
 def _rounded_mask(size: tuple[int, int], radius: int) -> Image.Image:
@@ -445,8 +480,16 @@ def render_widget(track: dict[str, Any]) -> Image.Image:
     artist = str(track.get("artist") or "UNKNOWN ARTIST")
     album = str(track.get("album") or "UNKNOWN ALBUM")
     detail_text = f"{artist} - {album}"
-    detail_text, detail_scale = _fit_pixel_line(detail_text, 650, 4, 2)
-    _draw_pixel_text(canvas, (558, 495), detail_text, detail_scale, ALBUM_INK)
+    # Keep row two genuinely larger and more legible. Long strings retain
+    # their 28 px character height and are compressed horizontally to fit.
+    _draw_pixel_text_width_fitted(
+        canvas,
+        (558, 487),
+        detail_text,
+        scale=4,
+        max_width=870,
+        fill=ALBUM_INK,
+    )
 
     footer = "via last.fm"
     if status != "NOW PLAYING":
