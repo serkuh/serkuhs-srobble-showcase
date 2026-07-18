@@ -10,7 +10,7 @@ from typing import Any
 import requests
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
-WIDGET_BUILD = "force-idle-test-v10"
+WIDGET_BUILD = "all-states-live-v11"
 
 ROOT = Path(__file__).resolve().parent
 ASSETS = ROOT / "assets"
@@ -29,7 +29,7 @@ IDLE_AFTER_SECONDS = 60 * 60
 # TEMPORARY VISUAL TEST OVERRIDE:
 # Use "NOW PLAYING", "LAST HEARD", or "IDLE".
 # Set to None to restore normal Last.fm-driven state switching.
-FORCE_WIDGET_STATE: str | None = "IDLE"
+FORCE_WIDGET_STATE: str | None = None
 
 CANVAS_SIZE = (1672, 941)
 ALBUM_BOX = (138, 299, 471, 646)  # user-confirmed exact inner boundary
