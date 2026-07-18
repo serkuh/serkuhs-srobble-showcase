@@ -10,14 +10,14 @@ from typing import Any
 import requests
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
-WIDGET_BUILD = "right-mascot-split-metadata-v3"
+WIDGET_BUILD = "cream-box-seat-placement-v4"
 
 ROOT = Path(__file__).resolve().parent
 ASSETS = ROOT / "assets"
 MASCOTS = ASSETS / "mascots"
 NOW_PLAYING_MASCOT = MASCOTS / "now-playing.png"
-NOW_PLAYING_MASCOT_WIDTH = 320
-NOW_PLAYING_MASCOT_POSITION = (1210, 65)
+NOW_PLAYING_MASCOT_WIDTH = 290
+NOW_PLAYING_MASCOT_POSITION = (1188, 120)
 
 CANVAS_SIZE = (1672, 941)
 ALBUM_BOX = (138, 299, 471, 646)  # user-confirmed exact inner boundary
