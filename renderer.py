@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import io
 import os
-import re
 import unicodedata
 from datetime import datetime, timezone
 from pathlib import Path
@@ -11,7 +10,7 @@ from typing import Any
 import requests
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
-WIDGET_BUILD = "album-year-mbid-v2"
+WIDGET_BUILD = "track-playcount-ready-v3"
 
 ROOT = Path(__file__).resolve().parent
 ASSETS = ROOT / "assets"
@@ -213,65 +212,12 @@ def _clean_dynamic_text_area(template: Image.Image) -> Image.Image:
 
 
 
-def _extract_release_year(releasedate: str | None) -> str | None:
-    if not releasedate:
-        return None
-    match = re.search(r"(19|20)\d{2}", str(releasedate))
-    return match.group(0) if match else None
-
-
-def fetch_album_year(
-    api_key: str,
-    *,
-    mbid: str | None = None,
-    artist: str | None = None,
-    album: str | None = None,
-) -> str | None:
-    params: dict[str, Any] = {
-        "method": "album.getInfo",
-        "api_key": api_key,
-        "format": "json",
-        "autocorrect": 1,
-    }
-
-    clean_mbid = str(mbid or "").strip()
-    clean_artist = str(artist or "").strip()
-    clean_album = str(album or "").strip()
-
-    if clean_mbid:
-        params["mbid"] = clean_mbid
-    elif clean_artist and clean_album:
-        params["artist"] = clean_artist
-        params["album"] = clean_album
-    else:
-        return None
-
-    response = requests.get(
-        "https://ws.audioscrobbler.com/2.0/",
-        params=params,
-        timeout=15,
-        headers={"User-Agent": "manakin-now-playing-widget/1.0"},
-    )
-    response.raise_for_status()
-    payload = response.json()
-    if "error" in payload:
-        raise RuntimeError(payload.get("message", "album.getInfo returned an error"))
-
-    album_info = payload.get("album", {}) or {}
-    return _extract_release_year(album_info.get("releasedate"))
-
-
-def fetch_track_info(artist: str, track: str, user: str, api_key: str) -> dict[str, Any]:
+def fetch_track_user_playcount(artist: str, track: str, user: str, api_key: str) -> int | None:
     artist = str(artist or "").strip()
     track = str(track or "").strip()
     user = str(user or "").strip()
     if not artist or not track or not user:
-        return {
-            "user_playcount": None,
-            "album_mbid": "",
-            "album_title": "",
-            "album_artist": "",
-        }
+        return None
 
     response = requests.get(
         "https://ws.audioscrobbler.com/2.0/",
@@ -292,20 +238,11 @@ def fetch_track_info(artist: str, track: str, user: str, api_key: str) -> dict[s
     if "error" in payload:
         raise RuntimeError(payload.get("message", "track.getInfo returned an error"))
 
-    track_info = payload.get("track", {}) or {}
-    raw_count = track_info.get("userplaycount")
+    raw_count = (payload.get("track", {}) or {}).get("userplaycount")
     try:
-        user_playcount = int(raw_count)
+        return int(raw_count)
     except (TypeError, ValueError):
-        user_playcount = None
-
-    album_info = track_info.get("album", {}) or {}
-    return {
-        "user_playcount": user_playcount,
-        "album_mbid": str(album_info.get("mbid") or "").strip(),
-        "album_title": str(album_info.get("title") or "").strip(),
-        "album_artist": str(album_info.get("artist") or "").strip(),
-    }
+        return None
 
 
 def fetch_lastfm_track(user: str, api_key: str) -> dict[str, Any]:
@@ -335,7 +272,6 @@ def fetch_lastfm_track(user: str, api_key: str) -> dict[str, Any]:
             "track": "NO RECENT TRACK",
             "artist": user,
             "album": "",
-            "album_year": None,
             "image_url": "",
             "now_playing": False,
             "timestamp": None,
@@ -364,40 +300,21 @@ def fetch_lastfm_track(user: str, api_key: str) -> dict[str, Any]:
         if timestamp_text:
             timestamp = int(timestamp_text)
 
-    track_details = {
-        "user_playcount": None,
-        "album_mbid": "",
-        "album_title": "",
-        "album_artist": "",
-    }
+    user_playcount = None
     try:
-        track_details = fetch_track_info(artist_name, track_name, user, api_key)
-    except Exception:
-        pass
-
-    # Prefer Last.fm's canonical album identifier from track.getInfo. This is
-    # more reliable than matching only the raw album text supplied by a player.
-    canonical_album = track_details.get("album_title") or album_name
-    canonical_album_artist = track_details.get("album_artist") or artist_name
-
-    album_year = None
-    try:
-        album_year = fetch_album_year(
+        user_playcount = fetch_track_user_playcount(
+            artist_name,
+            track_name,
+            user,
             api_key,
-            mbid=track_details.get("album_mbid"),
-            artist=canonical_album_artist,
-            album=canonical_album,
         )
     except Exception:
-        album_year = None
-
-    user_playcount = track_details.get("user_playcount")
+        user_playcount = None
 
     return {
         "track": track_name,
         "artist": artist_name,
         "album": album_name,
-        "album_year": album_year,
         "image_url": image_url,
         "now_playing": now_playing,
         "timestamp": timestamp,
@@ -449,9 +366,7 @@ def render_widget(track: dict[str, Any]) -> Image.Image:
     main_text, main_scale = _fit_pixel_line(main, 850, 5, 3)
     _draw_pixel_text(canvas, (548, 404), main_text, main_scale, INK)
 
-    album_name = str(track.get("album") or "UNKNOWN ALBUM")
-    album_year = str(track.get("album_year") or "").strip()
-    album_text = f"{album_name} - {album_year}" if album_year else album_name
+    album_text = str(track.get("album") or "UNKNOWN ALBUM")
     album_text, album_scale = _fit_pixel_line(album_text, 760, 4, 2)
     _draw_pixel_text(canvas, (558, 495), album_text, album_scale, ALBUM_INK)
 
