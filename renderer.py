@@ -23,6 +23,8 @@ ALBUM_INK = (89, 123, 122, 255)
 FOOTER_INK = (165, 93, 79, 255)
 CREAM = (241, 231, 205, 255)
 
+GLYPH_FIX_VERSION = "accent-overlay-v2"
+
 
 # Built-in 5x7 bitmap alphabet. No external font and no Pillow font fallback.
 PIXEL_GLYPHS = {
@@ -52,14 +54,6 @@ PIXEL_GLYPHS = {
     "X": ["10001","10001","01010","00100","01010","10001","10001"],
     "Y": ["10001","10001","01010","00100","00100","00100","00100"],
     "Z": ["11111","00001","00010","00100","01000","10000","11111"],
-    # Spanish/Latin characters. Input is normalized to NFC and uppercased before drawing.
-    "Á": ["00100","01110","10001","11111","10001","10001","10001"],
-    "É": ["00100","11111","10000","11110","10000","10000","11111"],
-    "Í": ["00100","11111","00100","00100","00100","00100","11111"],
-    "Ó": ["00100","01110","10001","10001","10001","10001","01110"],
-    "Ú": ["00100","10001","10001","10001","10001","10001","01110"],
-    "Ü": ["01010","00000","10001","10001","10001","10001","01110"],
-    "Ñ": ["01101","10001","11001","10101","10011","10001","10001"],
     "0": ["01110","10001","10011","10101","11001","10001","01110"],
     "1": ["00100","01100","00100","00100","00100","00100","01110"],
     "2": ["01110","10001","00001","00010","00100","01000","11111"],
@@ -86,6 +80,25 @@ PIXEL_GLYPHS = {
     " ": ["00000"]*7,
 }
 
+# Accented letters reuse the exact unaccented 5x7 letterform. The accent is
+# drawn above the normal cap height, so accented letters remain the same size
+# and baseline as the rest of the custom alphabet.
+ACCENTED_LETTERS = {
+    "Á": ("A", "acute"),
+    "É": ("E", "acute"),
+    "Í": ("I", "acute"),
+    "Ó": ("O", "acute"),
+    "Ú": ("U", "acute"),
+    "Ü": ("U", "diaeresis"),
+    "Ñ": ("N", "tilde"),
+}
+
+ACCENT_BITMAPS = {
+    "acute": ["00010", "00100"],
+    "diaeresis": ["01010"],
+    "tilde": ["01010", "10100"],
+}
+
 
 def _pixel_measure(text: str, scale: int, spacing: int = 1) -> int:
     if not text:
@@ -105,20 +118,46 @@ def _fit_pixel_line(text: str, max_width: int, start_scale: int, minimum_scale: 
     return (clean.rstrip() + suffix if clean else suffix), scale
 
 
+def _draw_bitmap(
+    draw: ImageDraw.ImageDraw,
+    xy: tuple[int, int],
+    rows: list[str],
+    scale: int,
+    fill: tuple[int, int, int, int],
+) -> None:
+    x0, y0 = xy
+    for row, bits in enumerate(rows):
+        for col, bit in enumerate(bits):
+            if bit == "1":
+                draw.rectangle(
+                    (
+                        x0 + col * scale,
+                        y0 + row * scale,
+                        x0 + (col + 1) * scale - 1,
+                        y0 + (row + 1) * scale - 1,
+                    ),
+                    fill=fill,
+                )
+
+
 def _draw_pixel_text(canvas: Image.Image, xy: tuple[int, int], text: str, scale: int, fill: tuple[int, int, int, int], spacing: int = 1) -> None:
     draw = ImageDraw.Draw(canvas)
     x0, y0 = xy
     cursor = x0
+
     for char in unicodedata.normalize("NFC", str(text)).upper():
-        glyph = PIXEL_GLYPHS.get(char, PIXEL_GLYPHS["?"])
-        for row, bits in enumerate(glyph):
-            for col, bit in enumerate(bits):
-                if bit == "1":
-                    draw.rectangle(
-                        (cursor + col * scale, y0 + row * scale,
-                         cursor + (col + 1) * scale - 1, y0 + (row + 1) * scale - 1),
-                        fill=fill,
-                    )
+        base_char, accent_name = ACCENTED_LETTERS.get(char, (char, None))
+        glyph = PIXEL_GLYPHS.get(base_char, PIXEL_GLYPHS["?"])
+
+        # The base letter is drawn exactly like its unaccented counterpart.
+        _draw_bitmap(draw, (cursor, y0), glyph, scale, fill)
+
+        if accent_name:
+            accent = ACCENT_BITMAPS[accent_name]
+            # Leave one blank pixel row between the accent and the letter.
+            accent_y = y0 - (len(accent) + 1) * scale
+            _draw_bitmap(draw, (cursor, accent_y), accent, scale, fill)
+
         cursor += (5 + spacing) * scale
 
 
