@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import io
 import os
+import unicodedata
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -51,6 +52,14 @@ PIXEL_GLYPHS = {
     "X": ["10001","10001","01010","00100","01010","10001","10001"],
     "Y": ["10001","10001","01010","00100","00100","00100","00100"],
     "Z": ["11111","00001","00010","00100","01000","10000","11111"],
+    # Spanish/Latin characters. Input is normalized to NFC and uppercased before drawing.
+    "Á": ["00100","01110","10001","11111","10001","10001","10001"],
+    "É": ["00100","11111","10000","11110","10000","10000","11111"],
+    "Í": ["00100","11111","00100","00100","00100","00100","11111"],
+    "Ó": ["00100","01110","10001","10001","10001","10001","01110"],
+    "Ú": ["00100","10001","10001","10001","10001","10001","01110"],
+    "Ü": ["01010","00000","10001","10001","10001","10001","01110"],
+    "Ñ": ["01101","10001","11001","10101","10011","10001","10001"],
     "0": ["01110","10001","10011","10101","11001","10001","01110"],
     "1": ["00100","01100","00100","00100","00100","00100","01110"],
     "2": ["01110","10001","00001","00010","00100","01000","11111"],
@@ -69,6 +78,9 @@ PIXEL_GLYPHS = {
     "'": ["00100","00100","00000","00000","00000","00000","00000"],
     "?": ["01110","10001","00001","00010","00100","00000","00100"],
     "!": ["00100","00100","00100","00100","00100","00000","00100"],
+    "¡": ["00100","00000","00100","00100","00100","00100","00100"],
+    "¿": ["00100","00000","00100","01000","10000","10001","01110"],
+    "·": ["00000","00000","00000","00100","00000","00000","00000"],
     "(": ["00010","00100","01000","01000","01000","00100","00010"],
     ")": ["01000","00100","00010","00010","00010","00100","01000"],
     " ": ["00000"]*7,
@@ -82,7 +94,7 @@ def _pixel_measure(text: str, scale: int, spacing: int = 1) -> int:
 
 
 def _fit_pixel_line(text: str, max_width: int, start_scale: int, minimum_scale: int) -> tuple[str, int]:
-    clean = " ".join(str(text or "").upper().split())
+    clean = " ".join(unicodedata.normalize("NFC", str(text or "")).upper().split())
     for scale in range(start_scale, minimum_scale - 1, -1):
         if _pixel_measure(clean, scale) <= max_width:
             return clean, scale
@@ -97,7 +109,7 @@ def _draw_pixel_text(canvas: Image.Image, xy: tuple[int, int], text: str, scale:
     draw = ImageDraw.Draw(canvas)
     x0, y0 = xy
     cursor = x0
-    for char in str(text).upper():
+    for char in unicodedata.normalize("NFC", str(text)).upper():
         glyph = PIXEL_GLYPHS.get(char, PIXEL_GLYPHS["?"])
         for row, bits in enumerate(glyph):
             for col, bit in enumerate(bits):
