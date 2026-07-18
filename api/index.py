@@ -27,7 +27,7 @@ class handler(BaseHTTPRequestHandler):
 
         self.send_response(status)
         self.send_header("Content-Type", "image/png")
-        self.send_header("Cache-Control: public, max-age=0, s-maxage=60)
+        self.send_header("Cache-Control", "public, max-age=0, s-maxage=60")
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
