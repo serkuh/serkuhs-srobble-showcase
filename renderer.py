@@ -10,7 +10,7 @@ from typing import Any
 import requests
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
-WIDGET_BUILD = "cream-box-seat-placement-v5"
+WIDGET_BUILD = "last-heard-mascot-integrated-v6"
 
 ROOT = Path(__file__).resolve().parent
 ASSETS = ROOT / "assets"
@@ -18,6 +18,9 @@ MASCOTS = ASSETS / "mascots"
 NOW_PLAYING_MASCOT = MASCOTS / "now-playing.png"
 NOW_PLAYING_MASCOT_WIDTH = 325
 NOW_PLAYING_MASCOT_POSITION = (1180, 150)
+LAST_HEARD_MASCOT = MASCOTS / "last-heard.png"
+LAST_HEARD_MASCOT_WIDTH = 325
+LAST_HEARD_MASCOT_POSITION = (1180, 150)
 
 CANVAS_SIZE = (1672, 941)
 ALBUM_BOX = (138, 299, 471, 646)  # user-confirmed exact inner boundary
@@ -343,18 +346,34 @@ def _relative_time(timestamp: int | None) -> str:
 
 
 
-def _overlay_now_playing_mascot(canvas: Image.Image) -> Image.Image:
-    if not NOW_PLAYING_MASCOT.exists():
+def _overlay_mascot(
+    canvas: Image.Image,
+    asset_path: Path,
+    width: int,
+    position: tuple[int, int],
+) -> Image.Image:
+    if not asset_path.exists():
         return canvas
 
-    mascot = Image.open(NOW_PLAYING_MASCOT).convert("RGBA")
-    width = NOW_PLAYING_MASCOT_WIDTH
+    mascot = Image.open(asset_path).convert("RGBA")
     height = int(mascot.size[1] * (width / mascot.size[0]))
     mascot = mascot.resize((width, height), Image.Resampling.LANCZOS)
 
     layer = Image.new("RGBA", canvas.size, (0, 0, 0, 0))
-    layer.alpha_composite(mascot, NOW_PLAYING_MASCOT_POSITION)
+    layer.alpha_composite(mascot, position)
     return Image.alpha_composite(canvas, layer)
+
+
+def _overlay_now_playing_mascot(canvas: Image.Image) -> Image.Image:
+    return _overlay_mascot(
+        canvas, NOW_PLAYING_MASCOT, NOW_PLAYING_MASCOT_WIDTH, NOW_PLAYING_MASCOT_POSITION
+    )
+
+
+def _overlay_last_heard_mascot(canvas: Image.Image) -> Image.Image:
+    return _overlay_mascot(
+        canvas, LAST_HEARD_MASCOT, LAST_HEARD_MASCOT_WIDTH, LAST_HEARD_MASCOT_POSITION
+    )
 
 def render_widget(track: dict[str, Any]) -> Image.Image:
     template = Image.open(ASSETS / "widget-template-clean.png").convert("RGBA")
@@ -373,6 +392,8 @@ def render_widget(track: dict[str, Any]) -> Image.Image:
 
     if track.get("now_playing"):
         canvas = _overlay_now_playing_mascot(canvas)
+    else:
+        canvas = _overlay_last_heard_mascot(canvas)
 
     status = "NOW PLAYING" if track.get("now_playing") else "LAST HEARD"
     status_box = (565, 318, 798, 360)
