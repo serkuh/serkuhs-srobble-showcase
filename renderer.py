@@ -10,7 +10,7 @@ from typing import Any
 import requests
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
-WIDGET_BUILD = "larger-detail-text-v9"
+WIDGET_BUILD = "force-idle-test-v10"
 
 ROOT = Path(__file__).resolve().parent
 ASSETS = ROOT / "assets"
@@ -25,6 +25,11 @@ IDLE_MASCOT = MASCOTS / "idle.png"
 IDLE_MASCOT_WIDTH = 620
 IDLE_MASCOT_POSITION = (990, 150)
 IDLE_AFTER_SECONDS = 60 * 60
+
+# TEMPORARY VISUAL TEST OVERRIDE:
+# Use "NOW PLAYING", "LAST HEARD", or "IDLE".
+# Set to None to restore normal Last.fm-driven state switching.
+FORCE_WIDGET_STATE: str | None = "IDLE"
 
 CANVAS_SIZE = (1672, 941)
 ALBUM_BOX = (138, 299, 471, 646)  # user-confirmed exact inner boundary
@@ -371,6 +376,9 @@ def fetch_lastfm_track(user: str, api_key: str) -> dict[str, Any]:
 
 
 def _widget_state(track: dict[str, Any]) -> str:
+    if FORCE_WIDGET_STATE in {"NOW PLAYING", "LAST HEARD", "IDLE"}:
+        return FORCE_WIDGET_STATE
+
     if track.get("now_playing"):
         return "NOW PLAYING"
 
