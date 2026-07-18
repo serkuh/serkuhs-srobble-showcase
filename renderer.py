@@ -10,10 +10,14 @@ from typing import Any
 import requests
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
-WIDGET_BUILD = "track-playcount-ready-v3"
+WIDGET_BUILD = "now-playing-mascot-v1"
 
 ROOT = Path(__file__).resolve().parent
 ASSETS = ROOT / "assets"
+MASCOTS = ASSETS / "mascots"
+NOW_PLAYING_MASCOT = MASCOTS / "now-playing.png"
+NOW_PLAYING_MASCOT_WIDTH = 420
+NOW_PLAYING_MASCOT_POSITION = (80, 10)
 
 CANVAS_SIZE = (1672, 941)
 ALBUM_BOX = (138, 299, 471, 646)  # user-confirmed exact inner boundary
@@ -338,6 +342,20 @@ def _relative_time(timestamp: int | None) -> str:
     return f"{hours // 24}d ago"
 
 
+
+def _overlay_now_playing_mascot(canvas: Image.Image) -> Image.Image:
+    if not NOW_PLAYING_MASCOT.exists():
+        return canvas
+
+    mascot = Image.open(NOW_PLAYING_MASCOT).convert("RGBA")
+    width = NOW_PLAYING_MASCOT_WIDTH
+    height = int(mascot.size[1] * (width / mascot.size[0]))
+    mascot = mascot.resize((width, height), Image.Resampling.LANCZOS)
+
+    layer = Image.new("RGBA", canvas.size, (0, 0, 0, 0))
+    layer.alpha_composite(mascot, NOW_PLAYING_MASCOT_POSITION)
+    return Image.alpha_composite(canvas, layer)
+
 def render_widget(track: dict[str, Any]) -> Image.Image:
     template = Image.open(ASSETS / "widget-template-clean.png").convert("RGBA")
     if template.size != CANVAS_SIZE:
@@ -352,6 +370,9 @@ def render_widget(track: dict[str, Any]) -> Image.Image:
     cover_layer = Image.new("RGBA", canvas.size, (0, 0, 0, 0))
     cover_layer.paste(cover, (x1, y1), _rounded_mask(cover_size, ALBUM_RADIUS))
     canvas = Image.alpha_composite(canvas, cover_layer)
+
+    if track.get("now_playing"):
+        canvas = _overlay_now_playing_mascot(canvas)
 
     status = "NOW PLAYING" if track.get("now_playing") else "LAST HEARD"
     status_box = (565, 318, 798, 360)
