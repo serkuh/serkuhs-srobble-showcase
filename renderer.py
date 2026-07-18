@@ -10,14 +10,14 @@ from typing import Any
 import requests
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
-WIDGET_BUILD = "now-playing-mascot-placement-v2"
+WIDGET_BUILD = "right-mascot-split-metadata-v3"
 
 ROOT = Path(__file__).resolve().parent
 ASSETS = ROOT / "assets"
 MASCOTS = ASSETS / "mascots"
 NOW_PLAYING_MASCOT = MASCOTS / "now-playing.png"
 NOW_PLAYING_MASCOT_WIDTH = 320
-NOW_PLAYING_MASCOT_POSITION = (220, 40)
+NOW_PLAYING_MASCOT_POSITION = (1210, 65)
 
 CANVAS_SIZE = (1672, 941)
 ALBUM_BOX = (138, 299, 471, 646)  # user-confirmed exact inner boundary
@@ -383,13 +383,17 @@ def render_widget(track: dict[str, Any]) -> Image.Image:
     status_y = int((status_box[1] + status_box[3] - status_height) / 2)
     _draw_pixel_text(canvas, (status_x, status_y), status, status_scale, INK)
 
-    main = f"{track.get('track', '')} - {track.get('artist', '')}"
-    main_text, main_scale = _fit_pixel_line(main, 850, 5, 3)
-    _draw_pixel_text(canvas, (548, 404), main_text, main_scale, INK)
+    # Reserve the right side of the information panel for the mascot.
+    # Track receives the strongest hierarchy; artist and album share line two.
+    track_text = str(track.get("track") or "UNKNOWN TRACK")
+    track_text, track_scale = _fit_pixel_line(track_text, 650, 5, 3)
+    _draw_pixel_text(canvas, (548, 404), track_text, track_scale, INK)
 
-    album_text = str(track.get("album") or "UNKNOWN ALBUM")
-    album_text, album_scale = _fit_pixel_line(album_text, 760, 4, 2)
-    _draw_pixel_text(canvas, (558, 495), album_text, album_scale, ALBUM_INK)
+    artist = str(track.get("artist") or "UNKNOWN ARTIST")
+    album = str(track.get("album") or "UNKNOWN ALBUM")
+    detail_text = f"{artist} - {album}"
+    detail_text, detail_scale = _fit_pixel_line(detail_text, 650, 4, 2)
+    _draw_pixel_text(canvas, (558, 495), detail_text, detail_scale, ALBUM_INK)
 
     footer = "via last.fm"
     if not track.get("now_playing"):
