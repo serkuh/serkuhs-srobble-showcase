@@ -10,7 +10,7 @@ from typing import Any
 import requests
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
-WIDGET_BUILD = "last-heard-mascot-integrated-v6"
+WIDGET_BUILD = "idle-mascot-integrated-v7"
 
 ROOT = Path(__file__).resolve().parent
 ASSETS = ROOT / "assets"
@@ -21,6 +21,10 @@ NOW_PLAYING_MASCOT_POSITION = (1180, 150)
 LAST_HEARD_MASCOT = MASCOTS / "last-heard.png"
 LAST_HEARD_MASCOT_WIDTH = 325
 LAST_HEARD_MASCOT_POSITION = (1180, 130)
+IDLE_MASCOT = MASCOTS / "idle.png"
+IDLE_MASCOT_WIDTH = 620
+IDLE_MASCOT_POSITION = (990, 150)
+IDLE_AFTER_SECONDS = 60 * 60
 
 CANVAS_SIZE = (1672, 941)
 ALBUM_BOX = (138, 299, 471, 646)  # user-confirmed exact inner boundary
@@ -330,6 +334,26 @@ def fetch_lastfm_track(user: str, api_key: str) -> dict[str, Any]:
     }
 
 
+
+def _widget_state(track: dict[str, Any]) -> str:
+    if track.get("now_playing"):
+        return "NOW PLAYING"
+
+    timestamp = track.get("timestamp")
+    if not timestamp:
+        return "IDLE"
+
+    try:
+        age_seconds = max(
+            0,
+            int(datetime.now(timezone.utc).timestamp()) - int(timestamp),
+        )
+    except (TypeError, ValueError):
+        return "IDLE"
+
+    return "IDLE" if age_seconds >= IDLE_AFTER_SECONDS else "LAST HEARD"
+
+
 def _relative_time(timestamp: int | None) -> str:
     if not timestamp:
         return ""
@@ -375,6 +399,13 @@ def _overlay_last_heard_mascot(canvas: Image.Image) -> Image.Image:
         canvas, LAST_HEARD_MASCOT, LAST_HEARD_MASCOT_WIDTH, LAST_HEARD_MASCOT_POSITION
     )
 
+
+def _overlay_idle_mascot(canvas: Image.Image) -> Image.Image:
+    return _overlay_mascot(
+        canvas, IDLE_MASCOT, IDLE_MASCOT_WIDTH, IDLE_MASCOT_POSITION
+    )
+
+
 def render_widget(track: dict[str, Any]) -> Image.Image:
     template = Image.open(ASSETS / "widget-template-clean.png").convert("RGBA")
     if template.size != CANVAS_SIZE:
@@ -390,12 +421,13 @@ def render_widget(track: dict[str, Any]) -> Image.Image:
     cover_layer.paste(cover, (x1, y1), _rounded_mask(cover_size, ALBUM_RADIUS))
     canvas = Image.alpha_composite(canvas, cover_layer)
 
-    if track.get("now_playing"):
+    status = _widget_state(track)
+    if status == "NOW PLAYING":
         canvas = _overlay_now_playing_mascot(canvas)
-    else:
+    elif status == "LAST HEARD":
         canvas = _overlay_last_heard_mascot(canvas)
-
-    status = "NOW PLAYING" if track.get("now_playing") else "LAST HEARD"
+    else:
+        canvas = _overlay_idle_mascot(canvas)
     status_box = (565, 318, 798, 360)
     status_scale = 3
     status_width = _pixel_measure(status, status_scale)
@@ -417,7 +449,7 @@ def render_widget(track: dict[str, Any]) -> Image.Image:
     _draw_pixel_text(canvas, (558, 495), detail_text, detail_scale, ALBUM_INK)
 
     footer = "via last.fm"
-    if not track.get("now_playing"):
+    if status != "NOW PLAYING":
         age = _relative_time(track.get("timestamp"))
         if age:
             footer += f"  ·  {age}"
